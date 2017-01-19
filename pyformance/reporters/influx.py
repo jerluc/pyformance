@@ -2,6 +2,7 @@
 import urllib2
 import base64
 import logging
+import socket
 
 from .reporter import Reporter
 
@@ -22,7 +23,7 @@ class InfluxReporter(Reporter):
     (based on https://influxdb.com/docs/v1.1/guides/writing_data.html)
     """
 
-    def __init__(self, registry=None, reporting_interval=5, prefix="",
+    def __init__(self, registry=None, reporting_interval=5, prefix="", tags=None,
                  database=DEFAULT_INFLUX_DATABASE, server=DEFAULT_INFLUX_SERVER,
                  username=DEFAULT_INFLUX_USERNAME,
                  password=DEFAULT_INFLUX_PASSWORD,
@@ -30,6 +31,11 @@ class InfluxReporter(Reporter):
                  autocreate_database=False, clock=None):
         super(InfluxReporter, self).__init__(
             registry, reporting_interval, clock)
+        if tags:
+            self.tags = tags.copy()
+        else:
+            self.tags = {}
+        self.tags['host'] = socket.getfqdn()
         self.prefix = prefix
         self.database = database
         self.username = username
@@ -70,9 +76,13 @@ class InfluxReporter(Reporter):
                 table = key
             else:
                 table = "%s.%s" % (self.prefix, key)
+
+            if self.tags:
+                tags = "," + ",".join(["%s=%s" % (k, v)
+                                for (k, v) in self.tags.iteritems()])
             values = ",".join(["%s=%s" % (k, v)
                               for (k, v) in metric_values.iteritems()])
-            line = "%s %s %s" % (table, values, timestamp)
+            line = "%s%s %s %s" % (table, tags, values, timestamp)
             post_data.append(line)
         post_data = "\n".join(post_data)
         path = "/write?db=%s&precision=s" % self.database
